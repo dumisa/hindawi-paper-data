@@ -1,0 +1,30 @@
+#!/bin/bash
+cd ..
+
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpBbr" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpCubic" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpWestwood" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVegas" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpYeah" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVeno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpIllinois" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=6000 --sim_duration=3000 "
+
+
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpBbr" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpCubic" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpWestwood" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVegas" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpYeah" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVeno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpIllinois" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=12000 --sim_duration=3000 "
+
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpBbr" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpCubic" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpWestwood" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVegas" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=500 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpYeah" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpVeno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpIllinois" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=18000 --sim_duration=3000 "

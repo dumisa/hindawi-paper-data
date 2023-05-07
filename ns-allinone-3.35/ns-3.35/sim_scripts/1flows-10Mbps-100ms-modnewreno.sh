@@ -1,0 +1,16 @@
+#!/bin/bash
+cd ..
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=0 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=10 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=20 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=40 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=60 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=90 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=120 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=180 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=360 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=720 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=1200 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=1800 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=3600 --sim_duration=1000 "
+./waf --run "examples/tcp/my-dumbbell --flows=1 --sim_name="AggregPerf" --TcpType="TcpModNewReno" --btlBW="10Mbps" --btlDelay="100ms" --queueDiscSize=5400 --sim_duration=1000 "
