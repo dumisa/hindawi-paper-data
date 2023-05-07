@@ -5,6 +5,8 @@
 #include <math.h>
 #include <iostream>
 #include <iomanip>
+#include <vector>
+#include <random>
 
 using namespace ns3;
 using Eigen::MatrixXd;
@@ -21,21 +23,27 @@ std::vector<uint64_t>          AccumTxPkts;
 std::vector<uint64_t>          AccumRetransPkts;
 std::vector<uint64_t>          AccumLostPkts;
 std::vector<uint64_t>          PktsInFlight;
-std::vector<SequenceNumber32>  Last_Source_UnackSeq;
-std::vector<double>  Last_Source_UnackSeq_time;
-std::vector<double>  Last_Time_InFlight;
-std::vector<double>  measured_btlBW;
-std::vector<uint64_t>  seg_so_far;
-
-std::vector<std::deque<double>> occupancy;
-std::vector<std::deque<double>> arrival_rate;
-std::vector<std::deque<double>> ntime;
-std::vector<std::deque<double>> CoVs;
-
-std::vector<double> rttValue;
-std::vector<double> minRtt;
 std::vector<uint32_t> cWndValue;
 std::vector<uint32_t> inFlightValue;
+std::vector<double> rttValue;
+
+std::deque<double> occupancy;
+std::deque<double> aggreg_occupancy;
+std::deque<double> arrival_rate;
+std::deque<double> aggreg_arrival_rate;
+std::deque<double> ntime;
+std::deque<double> CoVs;
+double AverageRttValue=0;
+double Last_Time_InFlight=0;
+
+std::vector<uint64_t>  Last_Source_UnackSeq_value;
+std::vector<double>  Last_Source_UnackSeq_time;
+std::vector<double>  measured_source_btlBW;
+double measured_btlBW;
+
+std::default_random_engine generator;
+std::poisson_distribution<int> distribution(10);
+
 //uint32_t AckPkts;
 
 
@@ -44,6 +52,7 @@ Ptr<OutputStreamWrapper> RttStream;
 Ptr<OutputStreamWrapper> InFlightStream;
 Ptr<OutputStreamWrapper> PktsSentStream; 
 Ptr<OutputStreamWrapper> seqNumStream; 
+Ptr<OutputStreamWrapper> PacketsInQueueStream;
 
 /* Function to sort an array using insertion sort*/
 double MedianFilter(std::deque<double> arr)
@@ -181,157 +190,206 @@ std::deque<double> TikhonovNumDiff (std::deque<double> x, std::deque<double> y, 
 }
 
 // Trace congestion window
-static void CwndTracer (uint16_t source, uint32_t oldval, uint32_t newval)
+void CwndTracer (uint16_t source, uint32_t oldval, uint32_t newval)
 {
-              *cWndStream->GetStream () << Simulator::Now ().GetSeconds () 
-                                     << " S" << source
-                                     << " " << newval
-                                     << " " << (newval*8/rttValue[source])/1e6
-                                     << std::endl;
+  //std::cout << "Start CwndTracer " << std::endl;
+              // *cWndStream->GetStream () << Simulator::Now ().GetSeconds () 
+              //                        << " S" << source
+              //                        << " " << newval
+              //                        << " " << (newval*8/rttValue[source])/1e6
+              //                        << std::endl;
               cWndValue[source] = newval;
+  //std::cout << "Complete CwndTracer " << std::endl;
 
 }
 
 void InFlightTracer (uint16_t source, uint32_t old, uint32_t inFlight)
 {
   NS_UNUSED (old);
+  uint32_t aggregInFlight=0;
+
+  //std::cout << "Start InFlightTracer " << std::endl;
+
+  static bool FirstTime = true;
+  if (FirstTime)
+  {
+        FirstTime = false;
+        *InFlightStream->GetStream () << "0-Time"
+                    << " 1-Source"
+                    << " 2-bdp_pkts"
+                    << " 3-arr_Mbps "
+                    << " 4-aggreg_ar_Mbps "
+                    << " 5-AverageRttValue"
+                    << " 6-pktsize"
+                    << " 7-mupsi"
+                    << " 8-aggreg_mupsi"
+                    << " 9-occ_bdp_per_source"
+                    << " 10-mupsi_mm1_per_source"
+                    << " 11-aggreg_occ_bdp"
+                    << " 12-aggreg_mupsi_mm1"
+                    << " 13-measured_btlBW_Mbps"
+                    << std::endl;
+
+          std::cout << "Inflight headings done" << std::endl;
+  }
+
   inFlightValue[source] = inFlight;
 
-  double ar_, occ_; 
-  double bdp = minRtt[source]*measured_btlBW[source]/pktsize; //pkts
+  for (uint32_t i = 0; i < inFlightValue.size (); i++)
+  {
+    aggregInFlight += inFlightValue[i];
+    //std::cout << "inFlight:" << aggregInFlight << std::endl;
+  }
+
+
+  double ar_, occ_, aggreg_ar_, aggreg_occ_; 
+  //double bdp = (0.2*10e6/8)/pktsize; //pkts
+  double bdp = (0.2*measured_btlBW/8)/pktsize; //pkts
   double now_time = Simulator::Now ().GetSeconds ();
 
-  if (now_time - Last_Time_InFlight[source] >= rttValue[source])
+  if (now_time - Last_Time_InFlight >= 0.2)
   {
-        ar_ = double(inFlight/pktsize/rttValue[source])/bdp;
-        occ_ = double(inFlight/pktsize)/bdp;
+        ar_ = ((double(inFlight)/double(pktsize)))/AverageRttValue;
+        occ_ = (double(inFlight)/double(pktsize));
+        aggreg_ar_ = ((double(aggregInFlight)/double(pktsize)))/AverageRttValue;
+        aggreg_occ_ = (double(aggregInFlight)/double(pktsize));
+        //std::cout << "inFlight:" << aggregInFlight << " ar_: " << AverageRttValue << " occ_:" << occ_ << std::endl;
 
-        if (occupancy[source].size () < 10)
+        if (occupancy.size () < 10)
         {  
-          occupancy[source].push_back(double(occ_));
-          arrival_rate[source].push_back(ar_);
-          ntime[source].push_back (now_time);
+          occupancy.push_back(double(occ_));
+          arrival_rate.push_back(ar_);
+          aggreg_occupancy.push_back(double(aggreg_occ_));
+          aggreg_arrival_rate.push_back(aggreg_ar_);
+          ntime.push_back (now_time);
         } else 
         {
-          occupancy[source].pop_front();
-          arrival_rate[source].pop_front();
-          ntime[source].pop_front ();
+          occupancy.pop_front();
+          arrival_rate.pop_front();
+          aggreg_occupancy.pop_front();
+          aggreg_arrival_rate.pop_front();
+          ntime.pop_front ();
 
-          occupancy[source].push_back(double(occ_));
-          arrival_rate[source].push_back(ar_);
-          ntime[source].push_back (now_time);
+          occupancy.push_back(double(occ_));
+          arrival_rate.push_back(ar_);
+          aggreg_occupancy.push_back(double(occ_));
+          aggreg_arrival_rate.push_back(ar_);
+          ntime.push_back (now_time);
         }
 
           //std::deque<double> u;
           //u = TikhonovNumDiff (ntime, occupancy, 2);
-          double d_occupancy = TikhonovNumDiff (ntime[source], occupancy[source], 2)[0];
+          double d_occupancy = TikhonovNumDiff (ntime, occupancy, 2)[0];
+          double aggreg_d_occupancy = TikhonovNumDiff (ntime, aggreg_occupancy, 2)[0];
           //u = TikhonovNumDiff (ntime, occupancy, 2);
-          double d_arrival_rate = TikhonovNumDiff (ntime[source], arrival_rate[source], 2)[0];
-
-
-          double L = occ_;
-          L=L; 
+          double d_arrival_rate = TikhonovNumDiff (ntime, arrival_rate, 2)[0];
+          double aggreg_d_arrival_rate = TikhonovNumDiff (ntime, aggreg_arrival_rate, 2)[0];
 
           std::deque<double> inter_arrival_time;
-          for (uint8_t i; i < arrival_rate.size (); i++)
+          for (uint8_t i=0; i < arrival_rate.size (); i++)
           {
-            inter_arrival_time.push_back (1/arrival_rate[source][i]);
+            inter_arrival_time.push_back (1/arrival_rate[i]);
           }
 
           double CoV = coefficientOfVariation(inter_arrival_time, inter_arrival_time.size ());
 
-          if (CoVs[source].size () < 3) {
-            if (isfinite(CoV))  CoVs[source].push_back(CoV);
-            else if (CoVs[source].size () < 1) CoVs[source].push_back(0);
-            else CoVs[source].push_back(CoVs[source][CoVs[source].size () - 1]);
+          if (CoVs.size () < 3) {
+            if (isfinite(CoV))  CoVs.push_back(CoV);
+            else if (CoVs.size () < 1) CoVs.push_back(0);
+            else CoVs.push_back(CoVs[CoVs.size () - 1]);
           }
           else {
-            CoVs[source].pop_front();
-            if (isfinite(CoV))  CoVs[source].push_back(CoV);
-            else CoVs[source].push_back(CoVs[source][CoVs[source].size ()-1]);
+            CoVs.pop_front();
+            if (isfinite(CoV))  CoVs.push_back(CoV);
+            else CoVs.push_back(CoVs[CoVs.size ()-1]);
           }
 
-          CoV = CoVs[source][2];
-          double ratio=d_occupancy/d_arrival_rate;
-          //double E_ratio=d_occupancy[1]/d_arrival_rate[1];
-          //if(isfinite(ratio) && ratio >= 0)
+          CoV = CoVs[2];
+          double psi = d_occupancy/d_arrival_rate;
+          double aggreg_occ__psi = aggreg_d_occupancy/aggreg_d_arrival_rate;
+          aggreg_occ__psi = aggreg_occ__psi;
+          //double E_psi=d_occupancy[1]/d_arrival_rate[1];
+          //if(isfinite(psi) && psi >= 0)
           //if(not(d_arrival_rate == 0) && atio >= 0)
-            if(not(isnan(ratio)))
+            if(not(isnan(psi)) && psi > 0)
             {
               *InFlightStream->GetStream () << Simulator::Now ().GetSeconds () 
                                     << " S" << source
-                                    << std::fixed << std::setprecision(3)
+                                    << std::fixed << std::setprecision(6)
                                     << " " << bdp
-                                    << " " << measured_btlBW[source]*8/1e6
-                                    << " " << inFlight/pktsize/bdp
-                                    << " " << bdp*ar_*pktsize*8/1e6
+                                    << " " << ar_*pktsize*8*1e-6
+                                    << " " << aggreg_ar_*pktsize*8*1e-6
+                                    << " " << AverageRttValue
                                     << " " << pktsize
-                                    << " " << minRtt[source]
-                                    << " " << rttValue[source]
-                                    << " " << ratio/minRtt[source]
-                                    << " " << CoV << "--" << CoVs.size ()
-                                    << " " << L
-                                    << " " << (1.0+L)*(1.0+L)
+                                    << " " << psi/0.2
+                                    << " " << aggreg_occ__psi/0.2
+                                    << " " << occ_/bdp
+                                    << " " << pow((1.0+occ_/bdp),2)
+                                    << " " << aggreg_occ_/bdp
+                                    << " " << pow(1+aggreg_occ_/bdp,2)
+                                    << " " << measured_btlBW*1e-6
                                     << std::endl;
-              Last_Time_InFlight[source] = Simulator::Now ().GetSeconds ();
+              Last_Time_InFlight = Simulator::Now ().GetSeconds ();
             } 
             //else std::cout << "Not a number or less than zero " << std::endl;
   }
 
-  
+  inFlightValue[source] = inFlight;
 
 }
 
-static void RttTracer (uint16_t source, Time oldval, Time newval)
+void PacketsInQueueTracer (uint16_t router, uint32_t old, uint32_t newval)
+{
+  //std::cout << "Start PacketsInQueueTracer " << std::endl;
+        // *PacketsInQueueStream->GetStream () << Simulator::Now ().GetSeconds () 
+        //                           << " R" << router
+        //                           << " " << newval
+        //                           << std::endl;
+}
+
+void RttTracer (uint16_t source, Time oldval, Time newval)
 {
   NS_UNUSED (oldval);
-  //static bool first = true;
-  // *RttStream->GetStream () << Simulator::Now ().GetSeconds () 
-  //                          << " S" << source
-  //                          << " " << newval.GetSeconds () << std::endl;
+  //std::cout << "Start RttTracer " << std::endl;
+   // *RttStream->GetStream () << Simulator::Now ().GetSeconds () 
+   //                          << " S" << source
+   //                          << " " << newval.GetSeconds () << std::endl;
+  double sumRtt=0;
+  for (uint32_t i=0; i < rttValue.size (); i++)
+  {
+    sumRtt += rttValue[i];
+  }
+  AverageRttValue = sumRtt/rttValue.size ();
+
   rttValue[source] = newval.GetSeconds ();
-/*  if (first) 
-    {
-      first=false;
-      rttValue[source] = newval.GetSeconds ();
-      minRtt = rttValue[source];
-    }
-  else if (minRtt > rttValue[source]) minRtt = rttValue[source];
-  if (minRtt < 0.2) minRtt = 0.2;*/
+  //std::cout << "Complete RttTracer " << std::endl;
+
 }
 
 void UnackSequenceTracer (uint16_t source, SequenceNumber32 oldValue, SequenceNumber32 newValue)
 {
-  //std::cout << "UnackSequenceTracer "  << std::endl;
-
+  //std::cout << "Start UnackSequenceTracer " << std::endl;
   double now_time = Simulator::Now ().GetSeconds ();
   UnackSeq = newValue;
+  static uint64_t BytesSentSoFar=0, lastBytesSoFar=0;
+  static double last_time = 0;
 
-  if (now_time - Last_Source_UnackSeq_time[source] > 0)
+  BytesSentSoFar += newValue.GetValue () - oldValue.GetValue ();
+
+  if (now_time - last_time > 0)
     {      
-      // measured_btlBW[source] = (newValue.GetValue () - Last_Source_UnackSeq[source].GetValue ())*pktsize*8/
-      //                                       (now_time - Last_Source_UnackSeq_time[source]); //pkts per seconds
-      measured_btlBW[source] = (newValue.GetValue () - Last_Source_UnackSeq[source].GetValue ())/
-                                      (now_time - Last_Source_UnackSeq_time[source]); //bytes per time
-
-      seg_so_far[source] += (newValue.GetValue () - Last_Source_UnackSeq[source].GetValue ());
-
-      // *seqNumStream->GetStream () << now_time 
-      //                           << " S" << source
-      //                           << std::fixed << std::setprecision(3)
-      //                           << " " << measured_btlBW[source]/1e6
-      //                           << " " << minRtt
-      //                           << " " << rttValue
-      //                           << std::endl;
-
-            Last_Source_UnackSeq_time[source] = now_time;
-            Last_Source_UnackSeq[source] = newValue;
+      measured_btlBW = double((BytesSentSoFar - lastBytesSoFar)*8)/(now_time - last_time);
+      last_time = now_time;
+      lastBytesSoFar = BytesSentSoFar;
     }
+    //std::cout << "Complete UnackSequenceTracer " << std::endl;
+
 }
 
 static void TcpTxDataTracer (uint16_t source, const Ptr<const Packet> packet, 
                                     const TcpHeader& header, const Ptr<const TcpSocketBase> socket)
 {
+  //std::cout << "Start DataTracer " << std::endl;
   if (packet->GetSize () > 100) //to make sure we have the correct trigger
     {
       //*PktsSentStream->GetStream () << Simulator::Now ().GetSeconds ();
@@ -344,7 +402,6 @@ static void TcpTxDataTracer (uint16_t source, const Ptr<const Packet> packet,
       {
         AccumAggregRetransPkts += 1;
         AccumRetransPkts[source] += 1;
-        //*PktsSentStream->GetStream () << " " << 1;
       }
       else
       {
@@ -355,19 +412,21 @@ static void TcpTxDataTracer (uint16_t source, const Ptr<const Packet> packet,
         AccumAggregLostPkts += 1;
         AccumLostPkts[source] += 1;
       }
-      minRtt[source] = socket->GetSocketState ()->m_minRtt.GetSeconds ();
-    }   
+    }  
+
+    //std::cout << "Complete DataTracer " << std::endl; 
 
 }
 
 void TraceData (dumbbell& dumbbellSim)
 {
     AsciiTraceHelper ascii;
-    cWndStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Cwnd.dat");
+    //cWndStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Cwnd.dat");
     //seqNumStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Seq.dat");
-    // RttStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Rtt.dat");
+    //RttStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Rtt.dat");
     InFlightStream = ascii.CreateFileStream (dir + "/" + file_prefix + "InFlight.dat");
-    // PktsSentStream = ascii.CreateFileStream (dir + "/" + file_prefix + "PktsSent.dat");  
+    // PktsSentStream = ascii.CreateFileStream (dir + "/" + file_prefix + "PktsSent.dat"); 
+    //PacketsInQueueStream = ascii.CreateFileStream (dir + "/" + file_prefix + "PacketsInQueue.dat");
 
     for (uint32_t source = 0; source < dumbbellSim.LeftCount (); ++source)
     {
@@ -411,6 +470,12 @@ void TraceData (dumbbell& dumbbellSim)
               + "/$ns3::TcpL4Protocol/SocketList/*/Tx", MakeBoundCallback (&TcpTxDataTracer, source));
     }
 
+    uint32_t nodeId = dumbbellSim.GetLeftRouter ()->GetId ();
+    std::cout << "Trace PktsInQueue in router " << 0 << " or Node " << nodeId << std::endl;
+    Config::ConnectWithoutContext ("/NodeList/" + std::to_string(nodeId) 
+            + "/$ns3::TrafficControlLayer/RootQueueDiscList/0/BytesInQueue", MakeBoundCallback (&PacketsInQueueTracer, nodeId));
+    
+    std::cout << "Complete setting traces " << std::endl;
 }
 
 
@@ -433,39 +498,63 @@ void PerformanceCalculations(Ptr<OutputStreamWrapper> PerformanceDataStream, dum
   double time_incr;
   //int flows = dumbbellSim.LeftCount ();
   time_incr = 2;
+  static double last_time=0; 
+  static uint32_t last_TxPkts=0;
+  double now_time;
+  double inst_throughput;
+
+  now_time = Simulator::Now ().GetSeconds ();
 
   static bool FirstTime = true;
   if (FirstTime)
   {
-        time_incr = time_incr - Simulator::Now ().GetSeconds ();
+        time_incr = time_incr - now_time;
         FirstTime = false;
         *PerformanceDataStream->GetStream () << "0-Time" << " "
-                    << "1-AccumAgregTxPkts " << "2-AccumAggregRetransPkts " << "3-AccumAggregLostPkts "
-                    << "4-AggregAverageThroughput "
-                    << "5-AggregAveragePlr "
+                    << " 1-AverageGoodput "
+                    << " 2-AverageThroughput "
+                    << " 3-AveragePlr "
+                    << " 4-AccumAggregTxPkts "
+                    << " 5-AccumAggregLostPkts "
+                    << " 6-AccumRetransPkts "
+                    << " 7-Instantanous Throughput "
                     << std::endl;
 
           std::cout << "PerformanceCalculations headings done" << std::endl;
   }
-
- double AverageGoodput = 0; 
+ double AverageGoodput = 0, AverageThroughput = 0; 
  double AveragePlr = 0;
 
- if (Simulator::Now ().GetSeconds () > 0)
+ if (now_time > 0)
+ {      
       AverageGoodput = (1e-6)*(AccumAggregTxPkts - AccumAggregRetransPkts)*8*1448/
-                           Simulator::Now ().GetSeconds ();
+                           now_time;
+      AverageThroughput = (1e-6)*(AccumAggregTxPkts)*8*1448/
+                           now_time;
+  }
  if (AccumAggregTxPkts > 0)
-      AveragePlr = double(AccumAggregLostPkts)/double(AccumAggregTxPkts);
+      AveragePlr = double(AccumAggregRetransPkts)/double(AccumAggregTxPkts);
 
  if (floor(AveragePlr*1000)/1000 > 0)
     AveragePlr = floor(AveragePlr*10000)/10000;
   else if (floor(AveragePlr*10000)/10000 > 0)
     AveragePlr = floor(AveragePlr*1000000)/1000000;
 
+  if (now_time - last_time > 0)
+  {
+    inst_throughput = (AccumAggregTxPkts - last_TxPkts)*pktsize*8/(now_time - last_time);
+    last_TxPkts = AccumAggregTxPkts;
+    last_time = now_time;
+  }
+
   *PerformanceDataStream->GetStream () << Simulator::Now ().GetSeconds ()  
-                << " " << AccumAggregTxPkts << " " << AccumAggregRetransPkts << " " << AccumAggregLostPkts
                 << " " << floor(AverageGoodput*1000)/1000 
+                << " " << floor(AverageThroughput*1000)/1000 
                 << " " << AveragePlr
+                << " " << AccumAggregTxPkts
+                << " " << AccumAggregLostPkts
+                << " " << AccumAggregRetransPkts
+                << " " << inst_throughput*1e-6
                 << std::endl;
 
   //std::cout << "PerformanceCalculations " << std::endl;
@@ -473,10 +562,23 @@ void PerformanceCalculations(Ptr<OutputStreamWrapper> PerformanceDataStream, dum
 
 }
 
+void ChangeBW (dumbbell dumbbellSim, uint64_t bps)
+{
+  PointToPointNetDevice *device=static_cast<PointToPointNetDevice *>(PeekPointer(dumbbellSim.GetRouterDevices (0)));
+  device->SetDataRate(DataRate(bps));
+}
+
+void StochBW (dumbbell dumbbellSim)
+{
+
+  ChangeBW(dumbbellSim, distribution(generator)*1e6);
+  Simulator::Schedule (Seconds (0.5), &StochBW, dumbbellSim);
+}
+
 int main (int argc, char *argv[])
 {
     std::string TcpType = "TcpBbr";
-    //double error_p = 0.0;
+    double error_p = 0.01;
     std::string btlBW = "10Mbps";
     std::string accessBW = "10Gbps";
     std::string btlDelay = "100ms";
@@ -493,7 +595,7 @@ int main (int argc, char *argv[])
                 "TcpHybla, TcpHighSpeed, TcpHtcp, TcpVegas, TcpScalable, TcpVeno, "
                 "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus, TcpLedbat, "
                 "TcpLp, TcpDctcp, TcpCubic, TcpBbr, TcpBbrV2", TcpType);
-    //cmd.AddValue ("error_p", "Packet error rate", error_p);
+    cmd.AddValue ("error_p", "Packet error rate", error_p);
     cmd.AddValue ("btlBW", "Bottleneck bandwidth", btlBW);
     cmd.AddValue ("btlDelay", "Bottleneck delay", btlDelay);
     cmd.AddValue ("accessBW", "Access link bandwidth", accessBW);
@@ -508,49 +610,31 @@ int main (int argc, char *argv[])
     //cmd.AddValue ("pcap_tracing", "Enable or disable PCAP tracing", pcap);
     cmd.Parse (argc, argv);
 
-    AccumTxPkts.reserve(flows);
-    AccumRetransPkts.reserve(flows);
-    AccumLostPkts.reserve(flows);
-    Last_Source_UnackSeq.reserve(flows);
-    Last_Source_UnackSeq_time.reserve(flows);
-    Last_Time_InFlight.reserve(flows);
-    measured_btlBW.reserve(flows);
-    seg_so_far.reserve(flows);
-    rttValue.reserve(flows);
-    minRtt.reserve(flows);
-    cWndValue.reserve(flows);
-    inFlightValue.reserve(flows);
 
-    std::deque<double> source_int_;
-    std::deque<double> source_int_time;
-    source_int_.push_back(0.0);
-    source_int_time.push_back (Simulator::Now ().GetSeconds ());
 
     for (uint8_t i = 0; i < flows; ++i)
     {
-      AccumTxPkts[i] = 0;
-      AccumRetransPkts[i] = 0;
-      AccumLostPkts[i] = 0;
-      seg_so_far[i] = 0;
-      Last_Source_UnackSeq_time[i] = Simulator::Now ().GetSeconds ();
-      Last_Time_InFlight[i] = Simulator::Now ().GetSeconds ();
-      occupancy.push_back(source_int_);
-      arrival_rate.push_back(source_int_);
-      ntime.push_back(source_int_time);
-      CoVs.push_back(source_int_);
+      AccumTxPkts.push_back (0);
+      AccumRetransPkts.push_back (0);
+      AccumLostPkts.push_back (0);
+      rttValue.push_back (0.2);
+      inFlightValue.push_back (0);
+      cWndValue.push_back (0);
+      Last_Source_UnackSeq_time.push_back (0);
+      Last_Source_UnackSeq_value.push_back (0);
+      measured_source_btlBW.push_back (0);
     }
 
-    //std::cout << "Press ENTER to continue " << Last_Source_UnackSeq.size () <<" " << rttValue[0] << std::endl;
+    //std::cout << "Press ENTER to continue " << " " <<" " << rttValue[0] << std::endl;
     //getchar();
 
     dumbbell dumbbellSim(flows, TcpType, btlBW, btlDelay, accessBW, accessDelay, 
-                queueDisc, queueDiscSize, 0, sim_duration);
+                queueDisc, queueDiscSize, error_p, 0, sim_duration);
     ///dumbbellSim.printTopologyConfirmation ();
     //std::cout << "Press ENTER to continue" << std::endl;
     //getchar();
     //dumbbellSim.printAssignConfirmation ();
-    //std::cout << "Press ENTER to continue" << std::endl;
-    //getchar();
+
 
     Simulator::Schedule (Seconds (0.0001), &TraceData, dumbbellSim);
     //Simulator::Schedule (Seconds (0.0002), &TraceInFlight, dumbbellSim);
@@ -566,7 +650,7 @@ int main (int argc, char *argv[])
     // Create a new directory to store the output of the program
     file_prefix = TcpType + "-" + std::to_string(flows) + "-flows-" 
               + btlBW + "-" + btlDelay + "-" 
-              + std::to_string(queueDiscSize) + "p-";
+              + std::to_string(queueDiscSize) + "p-"; //2.1-2.01-";
     dir = "results/" + sim_name + "/" + std::to_string(flows) + "-flows/" 
               + btlBW + "-" + btlDelay + "/"
               + std::to_string(queueDiscSize) + "p-btlqueue/";
@@ -581,7 +665,7 @@ int main (int argc, char *argv[])
     Ptr<OutputStreamWrapper> PerformanceDataStream = ascii_file.CreateFileStream (dir + perfData_file_name);
     Simulator::Schedule (Seconds (0.001), &PerformanceCalculations, PerformanceDataStream, dumbbellSim);
     Simulator::Schedule (Seconds (0.01), &TrackProgress, sim_duration);
-
+    Simulator::Schedule (Seconds (0.5), &StochBW, dumbbellSim);
 
     Simulator::Stop (Seconds (sim_duration));
     Simulator::Run ();

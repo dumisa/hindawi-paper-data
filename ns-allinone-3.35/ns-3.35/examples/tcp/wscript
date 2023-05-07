@@ -62,3 +62,22 @@ def build(bld):
                                  ['point-to-point', 'internet', 'applications', 'traffic-control', 'network', 'internet-apps', 'flow-monitor'])
 
     obj.source = 'tcp-bbr-example.cc'
+
+    obj = bld.create_ns3_program('hindawi_paper_sim1',
+                                    ['point-to-point', 'internet', 'applications', 'traffic-control', 
+                                    'network', 'internet-apps', 'flow-monitor', 'my-dumbbell'])
+
+    obj.source = 'hindawi_paper_sim1.cc'
+
+    obj = bld.create_ns3_program('hindawi_paper_sim2',
+                                    ['point-to-point', 'internet', 'applications', 'traffic-control', 
+                                    'network', 'internet-apps', 'flow-monitor', 'my-dumbbell'])
+
+    obj.source = 'hindawi_paper_sim2.cc'
+
+    obj = bld.create_ns3_program('hindawi_paper_sim3',
+                                    ['point-to-point', 'internet', 'applications', 'traffic-control', 
+                                    'network', 'internet-apps', 'flow-monitor', 'my-dumbbell'])
+
+    obj.source = 'hindawi_paper_sim3.cc'
+

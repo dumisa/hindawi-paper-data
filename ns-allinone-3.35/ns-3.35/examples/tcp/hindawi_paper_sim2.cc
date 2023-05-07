@@ -1,6 +1,5 @@
 
 #include "ns3/my-dumbbell.h"
-#include "ns3/TikhonovNumDiff.h"
 #include <deque>
 #include <eigen3/Eigen/Eigen>
 #include <math.h>
@@ -8,12 +7,6 @@
 #include <iomanip>
 #include <vector>
 #include <random>
-#include <fstream>
-#include "ns3/gnuplot.h"
-#include "ns3/core-module.h"
-#include "ns3/stats-module.h"
-#include <gtk/gtk.h>
-#include <algorithm>    // std::min
 
 using namespace ns3;
 using Eigen::MatrixXd;
@@ -43,28 +36,10 @@ std::deque<double> CoVs;
 double AverageRttValue=0;
 double Last_Time_InFlight=0;
 
-std::deque<double> x_cwnd;
-std::deque<double> y_cwnd;
-std::deque<double> x_InFlight;
-std::deque<double> x_InFlight2;
-std::deque<double> x_InFlight3;
-std::deque<double> y_InFlight;
-std::deque<double> y_arrival_rate;
-std::deque<double> y_d_occupancy;
-std::deque<double> y_d_arrival_rate;
-std::deque<double> y_mupsi;
-std::deque<double> y_d_occupancy2;
-std::deque<double> y_d_arrival_rate2;
-std::deque<double> y_mupsi2;
-std::deque<double> y_d_occupancy3;
-std::deque<double> y_d_arrival_rate3;
-std::deque<double> y_mupsi3;
-
 std::vector<uint64_t>  Last_Source_UnackSeq_value;
 std::vector<double>  Last_Source_UnackSeq_time;
 std::vector<double>  measured_source_btlBW;
 double measured_btlBW;
-double Eu; //expected u
 
 std::default_random_engine generator;
 std::poisson_distribution<int> distribution(10);
@@ -131,7 +106,7 @@ double coefficientOfVariation(std::deque<double> arr, int n)
    return standardDeviation(arr, n) / mean(arr, n);
 }
 
-//numerical differentiation using Tikhonov
+//numerical differentiation
 std::deque<double> TikhonovNumDiff (std::deque<double> x, std::deque<double> y, int k) 
 {
   int n = x.size ();
@@ -204,218 +179,35 @@ std::deque<double> TikhonovNumDiff (std::deque<double> x, std::deque<double> y, 
      u.push_back (u_(i));
    }   
 
-  //std::deque<double> out;
+  std::deque<double> out;
   //out.push_back(MedianFilter(u));
-  //out.push_back(u[u.size () - 1]);
-  //double Eu;
+  out.push_back(u[u.size () - 1]);
+  double Eu;
   Eu = (A*u_ - y_hat).norm () + reg_par*(D*u_).norm ();
-  //out.push_back(Eu);
+  out.push_back(Eu);
 
-  return u;
-}
-
-
-void Create2dPlot (std::string plotDir, std::string plotFileName, std::string plotTitle, 
-                    std::string plotXAxisHeading,
-                    std::string plotYAxisHeading, std::string dataTitle, 
-                    std::deque<double> x, std::deque<double> y)
-{
-  using namespace std;
-
-  string fileNameWithoutExtension = plotDir + plotFileName;
-  string plotDatasetLabel         = dataTitle;
-  string datasetContext           = "Dataset/Context/String";
-
-  // Create an aggregator.
-  Ptr<GnuplotAggregator> aggregator =
-    CreateObject<GnuplotAggregator> (fileNameWithoutExtension);
-
-  // Set the aggregator's properties.
-  aggregator->SetTerminal ("png");
-  aggregator->SetTitle (plotTitle);
-  aggregator->SetLegend (plotXAxisHeading, plotYAxisHeading);
-
-  // Add a data set to the aggregator.
-  aggregator->Add2dDataset (datasetContext, plotDatasetLabel);
-
-  // aggregator must be turned on
-  aggregator->Enable ();
-
-  // Create the 2-D dataset.
-  for (uint32_t i = 0; i < x.size (); i++)
-    {
-
-      // Add this point to the plot.
-      aggregator->Write2d (datasetContext, x[i], y[i]);
-    }
-
-  // Disable logging of data for the aggregator.
-  aggregator->Disable ();
-}
-
-void Create2dPlot2 (std::string plotDir, std::string plotFileName, std::string plotTitle, std::string plotXAxisHeading,
-                    std::string plotYAxisHeading, std::string dataTitle, 
-                    std::deque<double> x, std::deque<double> y)
-{
-
-  std::string graphicsFileName        = plotFileName + ".png";
-  plotFileName            = plotFileName + ".plt";
-
-  // Instantiate the plot and set its title.
-  Gnuplot plot (graphicsFileName);
-  plot.SetTitle (plotTitle);
-
-  // Make the graphics file, which the plot file will create when it
-  // is used with Gnuplot, be a PNG file.
-  plot.SetTerminal ("png");
-
-  // Set the labels for each axis.
-  plot.SetLegend ("X Values", "Y Values");
-
-  // Set the range for the x axis.
-  //plot.AppendExtra ("set xrange [-6:+6]");
-
-  // Instantiate the dataset, set its title, and make the points be
-  // plotted along with connecting lines.
-  Gnuplot2dDataset dataset;
-  dataset.SetTitle (dataTitle);
-  dataset.SetStyle (Gnuplot2dDataset::LINES_POINTS);
-
-  // Create the 2-D dataset.
-  for (uint32_t i = 0; i <= x.size (); i++)
-    {
-
-      // Add this point.
-      dataset.Add (x[i], y[i]);
-    }
-
-  // Add the dataset to the plot.
-  plot.AddDataset (dataset);
-
-  std::string plotFullName = plotDir + plotFileName;
-  std::ofstream outfile;
-  outfile.open(plotFullName.c_str());
-  //std::cout << "Create2dPlot: " << plotFileName << std::endl;
-
-  std::ofstream plotFile (plotFullName.c_str());
-
-  // Write the plot file.
-  plot.GenerateOutput (plotFile);
-
-  // Close the plot file.
-  plotFile.close ();
-}
-
-void PlotCwnd ()
-{
-    std::string plotDir = dir + "plots/";
-    std::string plotFile = file_prefix + "cwnd";
-    Create2dPlot (plotDir, plotFile, "cwnd", "time (s)",
-                    "cwnd (bytes)", "", 
-                    x_cwnd, y_cwnd);
-
-        //std::string CwndPlotFile = dir + "plots/" + file_prefix + "cwnd";
-    //Ptr<OutputStreamWrapper> CwndPlotStream = ascii_file.CreateFileStream (CwndPlotFile);
-    Simulator::Schedule (Seconds (10), &PlotCwnd);
-}
-
-void PlotInFlight ()
-{
-    std::string plotDir = dir + "plots/";
-    std::string plotFile = file_prefix + "InFlight";
-    Create2dPlot (plotDir, plotFile, "InFlight vs time", "time (s)",
-                    "InFlight (bytes)", " ", 
-                    x_InFlight, y_InFlight);
-
-    plotFile = file_prefix + "arrival_rate";
-    Create2dPlot (plotDir, plotFile, "Arrival rate vs time", "time (s)",
-                    "Average arrival rate (Mbps)", " ", 
-                    x_InFlight, y_arrival_rate);
-
-    plotFile = file_prefix + "d_occupancy";
-    Create2dPlot (plotDir, plotFile, "Delta occupancy vs time", "time (s)",
-                    "Delta occupancy (bytes/s)", " ", 
-                    x_InFlight, y_d_occupancy);
-
-    plotFile = file_prefix + "d_arrival_rate";
-    Create2dPlot (plotDir, plotFile, "Delta arrival rate vs time", "time (s)",
-                    "Delta arrival rate (bytes^2/s^2)", " ", 
-                    x_InFlight, y_d_arrival_rate);
-
-    plotFile = file_prefix + "mupsi";
-    Create2dPlot (plotDir, plotFile, "mupsi vs time", "time (s)",
-                    "Psi)", " ", 
-                    x_InFlight, y_mupsi);
-
-    plotFile = file_prefix + "d_occupancy2";
-    Create2dPlot (plotDir, plotFile, "Delta occupancy2 vs time", "time (s)",
-                    "Delta occupancy2 (bytes/s)", " ", 
-                    x_InFlight2, y_d_occupancy2);
-
-    plotFile = file_prefix + "d_arrival_rate2";
-    Create2dPlot (plotDir, plotFile, "Delta arrival rate2 vs time", "time (s)",
-                    "Delta arrival2 rate (bytes^2/s^2)", " ", 
-                    x_InFlight2, y_d_arrival_rate2);
-
-    plotFile = file_prefix + "mupsi2";
-    Create2dPlot (plotDir, plotFile, "mupsi2 vs time", "time (s)",
-                    "Psi2)", " ", 
-                    x_InFlight2, y_mupsi2);
-
-    plotFile = file_prefix + "d_occupancy3";
-    Create2dPlot (plotDir, plotFile, "Delta occupancy3 vs time", "time (s)",
-                    "Delta occupancy2 (bytes/s)", " ", 
-                    x_InFlight3, y_d_occupancy3);
-
-    plotFile = file_prefix + "d_arrival_rate3";
-    Create2dPlot (plotDir, plotFile, "Delta arrival rate3 vs time", "time (s)",
-                    "Delta arrival2 rate (bytes^2/s^3)", " ", 
-                    x_InFlight3, y_d_arrival_rate3);
-
-    plotFile = file_prefix + "mupsi3";
-    Create2dPlot (plotDir, plotFile, "mupsi3 vs time", "time (s)",
-                    "Psi2)", " ", 
-                    x_InFlight3, y_mupsi3);
-
-    //Simulator::Schedule (Seconds (10), &PlotInFlight);
+  return out;
 }
 
 // Trace congestion window
 void CwndTracer (uint16_t source, uint32_t oldval, uint32_t newval)
 {
-  static uint32_t TotalcWndValue;
-
-  cWndValue[source] = newval;
-
-  for (uint32_t i = 0; i < inFlightValue.size (); i++)
-  {
-    TotalcWndValue += cWndValue[i];
-    //std::cout << "inFlight:" << aggregInFlight << std::endl;
-  }
-  
   //std::cout << "Start CwndTracer " << std::endl;
-  *cWndStream->GetStream () << Simulator::Now ().GetSeconds () 
-                          << " S" << source
-                          << " " << newval
-                          << " " << TotalcWndValue
-                          << std::endl;
-  x_cwnd.push_back (Simulator::Now ().GetSeconds ());
-  y_cwnd.push_back (double(TotalcWndValue));
-
+              // *cWndStream->GetStream () << Simulator::Now ().GetSeconds () 
+              //                        << " S" << source
+              //                        << " " << newval
+              //                        << " " << (newval*8/rttValue[source])/1e6
+              //                        << std::endl;
+              cWndValue[source] = newval;
   //std::cout << "Complete CwndTracer " << std::endl;
+
 }
 
 void InFlightTracer (uint16_t source, uint32_t old, uint32_t inFlight)
 {
   NS_UNUSED (old);
   uint32_t aggregInFlight=0;
-  double ar_, occ_, aggreg_ar_, aggreg_occ_; 
-  double bdp = (0.2*measured_btlBW/8)/pktsize; //pkts
-  double now_time = Simulator::Now ().GetSeconds ();
-  double d_occupancy, aggreg_d_occupancy, d_arrival_rate, 
-          aggreg_d_arrival_rate, psi, aggreg_occ__psi, 
-          aggreg_d_occupancy2, aggreg_d_arrival_rate2, aggreg_occ__psi2, 
-          aggreg_d_occupancy3, aggreg_d_arrival_rate3, aggreg_occ__psi3;
+
   //std::cout << "Start InFlightTracer " << std::endl;
 
   static bool FirstTime = true;
@@ -449,13 +241,19 @@ void InFlightTracer (uint16_t source, uint32_t old, uint32_t inFlight)
     //std::cout << "inFlight:" << aggregInFlight << std::endl;
   }
 
+
+  double ar_, occ_, aggreg_ar_, aggreg_occ_; 
+  //double bdp = (0.2*10e6/8)/pktsize; //pkts
+  double bdp = (0.2*measured_btlBW/8)/pktsize; //pkts
+  double now_time = Simulator::Now ().GetSeconds ();
+
   if (now_time - Last_Time_InFlight >= 0.2)
   {
         ar_ = ((double(inFlight)/double(pktsize)))/AverageRttValue;
         occ_ = (double(inFlight)/double(pktsize));
         aggreg_ar_ = ((double(aggregInFlight)/double(pktsize)))/AverageRttValue;
         aggreg_occ_ = (double(aggregInFlight)/double(pktsize));
-        //std::cout << "inFlight:" << aggregInFlight << " ar_: " << AverageRttValue << " occ_:" << occ_ << std::endl;      
+        //std::cout << "inFlight:" << aggregInFlight << " ar_: " << AverageRttValue << " occ_:" << occ_ << std::endl;
 
         if (occupancy.size () < 10)
         {  
@@ -479,70 +277,64 @@ void InFlightTracer (uint16_t source, uint32_t old, uint32_t inFlight)
           ntime.push_back (now_time);
         }
 
-        d_occupancy = MedianFilter(TikhonovNumDiff (ntime, occupancy, 2));
-        aggreg_d_occupancy = MedianFilter(TikhonovNumDiff (ntime, aggreg_occupancy, 2));
-        aggreg_d_occupancy2 = MedianFilter(TikhonovNumDiff (ntime, aggreg_occupancy, 1));
-        aggreg_d_occupancy3 = MedianFilter(TikhonovNumDiff (ntime, aggreg_occupancy, 0));
-        d_arrival_rate = MedianFilter(TikhonovNumDiff (ntime, arrival_rate, 2));
-        aggreg_d_arrival_rate = MedianFilter(TikhonovNumDiff (ntime, aggreg_arrival_rate, 2));
-        aggreg_d_arrival_rate2 = MedianFilter(TikhonovNumDiff (ntime, aggreg_arrival_rate, 1));
-        aggreg_d_arrival_rate3 = MedianFilter(TikhonovNumDiff (ntime, aggreg_arrival_rate, 0));
+          //std::deque<double> u;
+          //u = TikhonovNumDiff (ntime, occupancy, 2);
+          double d_occupancy = TikhonovNumDiff (ntime, occupancy, 2)[0];
+          double aggreg_d_occupancy = TikhonovNumDiff (ntime, aggreg_occupancy, 2)[0];
+          //u = TikhonovNumDiff (ntime, occupancy, 2);
+          double d_arrival_rate = TikhonovNumDiff (ntime, arrival_rate, 2)[0];
+          double aggreg_d_arrival_rate = TikhonovNumDiff (ntime, aggreg_arrival_rate, 2)[0];
 
-        psi = d_occupancy/d_arrival_rate;
-        aggreg_occ__psi = aggreg_d_occupancy/aggreg_d_arrival_rate;
-        aggreg_occ__psi2 = aggreg_d_occupancy2/aggreg_d_arrival_rate2;
-        aggreg_occ__psi3 = aggreg_d_occupancy3/aggreg_d_arrival_rate3;
-        if(not(isnan(psi)) && not(isinf(psi)))
-        {
+          std::deque<double> inter_arrival_time;
+          for (uint8_t i=0; i < arrival_rate.size (); i++)
+          {
+            inter_arrival_time.push_back (1/arrival_rate[i]);
+          }
+
+          double CoV = coefficientOfVariation(inter_arrival_time, inter_arrival_time.size ());
+
+          if (CoVs.size () < 3) {
+            if (isfinite(CoV))  CoVs.push_back(CoV);
+            else if (CoVs.size () < 1) CoVs.push_back(0);
+            else CoVs.push_back(CoVs[CoVs.size () - 1]);
+          }
+          else {
+            CoVs.pop_front();
+            if (isfinite(CoV))  CoVs.push_back(CoV);
+            else CoVs.push_back(CoVs[CoVs.size ()-1]);
+          }
+
+          CoV = CoVs[2];
+          double psi = d_occupancy/d_arrival_rate;
+          double aggreg_occ__psi = aggreg_d_occupancy/aggreg_d_arrival_rate;
+          aggreg_occ__psi = aggreg_occ__psi;
+          //double E_psi=d_occupancy[1]/d_arrival_rate[1];
+          //if(isfinite(psi) && psi >= 0)
+          //if(not(d_arrival_rate == 0) && atio >= 0)
+            if(not(isnan(psi)) && psi > 0)
+            {
               *InFlightStream->GetStream () << Simulator::Now ().GetSeconds () 
-                              << " S" << source
-                              << std::fixed << std::setprecision(6)
-                              << " " << bdp
-                              << " " << ar_*pktsize*8*1e-6
-                              << " " << aggreg_ar_*pktsize*8*1e-6
-                              << " " << AverageRttValue
-                              << " " << pktsize
-                              << " " << psi/0.2
-                              << " " << aggreg_occ__psi/0.2
-                              << " " << occ_/bdp
-                              << " " << pow((1.0+occ_/bdp),2)
-                              << " " << aggreg_occ_/bdp
-                              << " " << pow(1+aggreg_occ_/bdp,2)
-                              << " " << measured_btlBW*1e-6
-                              << std::endl;
+                                    << " S" << source
+                                    << std::fixed << std::setprecision(6)
+                                    << " " << bdp
+                                    << " " << ar_*pktsize*8*1e-6
+                                    << " " << aggreg_ar_*pktsize*8*1e-6
+                                    << " " << AverageRttValue
+                                    << " " << pktsize
+                                    << " " << psi/0.2
+                                    << " " << aggreg_occ__psi/0.2
+                                    << " " << occ_/bdp
+                                    << " " << pow((1.0+occ_/bdp),2)
+                                    << " " << aggreg_occ_/bdp
+                                    << " " << pow(1+aggreg_occ_/bdp,2)
+                                    << " " << measured_btlBW*1e-6
+                                    << std::endl;
               Last_Time_InFlight = Simulator::Now ().GetSeconds ();
-
-            x_InFlight.push_back (now_time);
-            y_InFlight.push_back (aggreg_occ_);
-            y_arrival_rate.push_back (aggreg_ar_);
-            y_d_occupancy.push_back (aggreg_d_occupancy );
-            y_d_arrival_rate.push_back (aggreg_d_arrival_rate);
-            y_mupsi.push_back(aggreg_occ__psi/0.2);
-        }
-
-
-        //else std::cout << "Not a number or less than zero " << std::endl;
-
-  }
-
-  if(not(isnan(aggreg_occ__psi2)) && not(isinf(aggreg_occ__psi2)))
-  {
-            x_InFlight2.push_back (now_time);
-            y_d_occupancy2.push_back (aggreg_d_occupancy2);
-            y_d_arrival_rate2.push_back (aggreg_d_arrival_rate2);
-            y_mupsi2.push_back(aggreg_occ__psi2/0.2);
-  }
-  if(not(isnan(aggreg_occ__psi3)) && not(isinf(aggreg_occ__psi3)))
-  {
-            x_InFlight3.push_back (now_time);
-            y_d_occupancy3.push_back (aggreg_d_occupancy3);
-            y_d_arrival_rate3.push_back (aggreg_d_arrival_rate3);
-            y_mupsi3.push_back(aggreg_occ__psi3/0.2);
+            } 
+            //else std::cout << "Not a number or less than zero " << std::endl;
   }
 
   inFlightValue[source] = inFlight;
-
-
 
 }
 
@@ -629,7 +421,7 @@ static void TcpTxDataTracer (uint16_t source, const Ptr<const Packet> packet,
 void TraceData (dumbbell& dumbbellSim)
 {
     AsciiTraceHelper ascii;
-    cWndStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Cwnd.dat");
+    //cWndStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Cwnd.dat");
     //seqNumStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Seq.dat");
     //RttStream = ascii.CreateFileStream (dir + "/" + file_prefix + "Rtt.dat");
     InFlightStream = ascii.CreateFileStream (dir + "/" + file_prefix + "InFlight.dat");
@@ -786,7 +578,7 @@ void StochBW (dumbbell dumbbellSim)
 int main (int argc, char *argv[])
 {
     std::string TcpType = "TcpBbr";
-    double error_p = 0.0;
+    double error_p = 0.01;
     std::string btlBW = "10Mbps";
     std::string accessBW = "10Gbps";
     std::string btlDelay = "100ms";
@@ -794,7 +586,7 @@ int main (int argc, char *argv[])
     std::string queueDisc = "FifoQueueDisc";
     uint32_t queueDiscSize = 0; //packets
     double sim_duration = 1000.0;
-    std::string sim_name="sim_matplotlib";
+    std::string sim_name="sim4_tikhonov";
     //bool pcaptracing = false;
   	uint8_t flows = 3;
 
@@ -803,7 +595,7 @@ int main (int argc, char *argv[])
                 "TcpHybla, TcpHighSpeed, TcpHtcp, TcpVegas, TcpScalable, TcpVeno, "
                 "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus, TcpLedbat, "
                 "TcpLp, TcpDctcp, TcpCubic, TcpBbr, TcpBbrV2", TcpType);
-    //cmd.AddValue ("error_p", "Packet error rate", error_p);
+    cmd.AddValue ("error_p", "Packet error rate", error_p);
     cmd.AddValue ("btlBW", "Bottleneck bandwidth", btlBW);
     cmd.AddValue ("btlDelay", "Bottleneck delay", btlDelay);
     cmd.AddValue ("accessBW", "Access link bandwidth", accessBW);
@@ -838,7 +630,6 @@ int main (int argc, char *argv[])
 
     dumbbell dumbbellSim(flows, TcpType, btlBW, btlDelay, accessBW, accessDelay, 
                 queueDisc, queueDiscSize, error_p, 0, sim_duration);
-
     ///dumbbellSim.printTopologyConfirmation ();
     //std::cout << "Press ENTER to continue" << std::endl;
     //getchar();
@@ -863,7 +654,7 @@ int main (int argc, char *argv[])
     dir = "results/" + sim_name + "/" + std::to_string(flows) + "-flows/" 
               + btlBW + "-" + btlDelay + "/"
               + std::to_string(queueDiscSize) + "p-btlqueue/";
-    std::string dirToSave = "mkdir -p " + dir + "plots/";
+    std::string dirToSave = "mkdir -p " + dir;
     if (system (dirToSave.c_str ()) == -1)
     {
       exit (1);
@@ -871,20 +662,12 @@ int main (int argc, char *argv[])
 
     AsciiTraceHelper ascii_file;
     std::string perfData_file_name = file_prefix + "btlqueue-PerfData.dat";
-    
     Ptr<OutputStreamWrapper> PerformanceDataStream = ascii_file.CreateFileStream (dir + perfData_file_name);
     Simulator::Schedule (Seconds (0.001), &PerformanceCalculations, PerformanceDataStream, dumbbellSim);
     Simulator::Schedule (Seconds (0.01), &TrackProgress, sim_duration);
-
-    //std::string CwndPlotFile = dir + "plots/" + file_prefix + "cwnd";
-    //Ptr<OutputStreamWrapper> CwndPlotStream = ascii_file.CreateFileStream (CwndPlotFile);
-    Simulator::Schedule (Seconds (100), &PlotInFlight);
-    Simulator::Schedule (Seconds (200), &PlotInFlight);
-    Simulator::Schedule (Seconds (sim_duration), &PlotInFlight);
-    //Simulator::Schedule (Seconds (0.5), &StochBW, dumbbellSim);
-    //Simulator::Schedule (Seconds (200), &ChangeBW, dumbbellSim, 30e6);
-    //Simulator::Schedule (Seconds (500), &ChangeBW, dumbbellSim, 10e6);
-    //Simulator::Schedule (Seconds (800), &ChangeBW, dumbbellSim, 30e6);
+    Simulator::Schedule (Seconds (200), &ChangeBW, dumbbellSim, 30e6);
+    Simulator::Schedule (Seconds (500), &ChangeBW, dumbbellSim, 10e6);
+    Simulator::Schedule (Seconds (800), &ChangeBW, dumbbellSim, 30e6);
 
     Simulator::Stop (Seconds (sim_duration));
     Simulator::Run ();

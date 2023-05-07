@@ -665,10 +665,6 @@ int main (int argc, char *argv[])
     Ptr<OutputStreamWrapper> PerformanceDataStream = ascii_file.CreateFileStream (dir + perfData_file_name);
     Simulator::Schedule (Seconds (0.001), &PerformanceCalculations, PerformanceDataStream, dumbbellSim);
     Simulator::Schedule (Seconds (0.01), &TrackProgress, sim_duration);
-    //Simulator::Schedule (Seconds (0.5), &StochBW, dumbbellSim);
-    //Simulator::Schedule (Seconds (200), &ChangeBW, dumbbellSim, 30e6);
-    //Simulator::Schedule (Seconds (500), &ChangeBW, dumbbellSim, 10e6);
-    //Simulator::Schedule (Seconds (800), &ChangeBW, dumbbellSim, 30e6);
 
     Simulator::Stop (Seconds (sim_duration));
     Simulator::Run ();
